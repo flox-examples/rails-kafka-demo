@@ -5,7 +5,7 @@ gem "rails", "~> 7.2"
 gem "pg", "~> 1.5"
 gem "puma", "~> 6.4"
 gem "bootsnap", require: false
-gem "tzinfo-data", platforms: %i[windows jruby]
+gem "tzinfo-data"
 
 # Native C extension — requires librdkafka (provided by Devbox)
 # USE_SYSTEM_LIBRDKAFKA=true links against Devbox-managed librdkafka
@@ -16,7 +16,7 @@ group :development do
 end
 
 group :development, :test do
-  gem "debug", platforms: %i[mri windows]
+  gem "debug"
   gem "rspec-rails", "~> 6.1"
   gem "factory_bot_rails", "~> 6.4"
   gem "shoulda-matchers", "~> 6.0"

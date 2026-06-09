@@ -19,9 +19,9 @@
       "source": "devbox",
       "version": "4.4.1"
     },
-    "librdkafka@latest": {
+    "rdkafka@latest": {
       "last_modified": "2025-06-01T00:00:00Z",
-      "resolved": "github:NixOS/nixpkgs/nixos-unstable#librdkafka",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#rdkafka",
       "source": "devbox",
       "version": "2.6.1"
     },

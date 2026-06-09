@@ -24,8 +24,7 @@
   },
   "shell": {
     "init_hook": [
-      "source .env.local 2>/dev/null || true",
-      "[ -x bin/setup ] && bin/setup"
+      "source .env.local 2>/dev/null || true"
     ],
     "scripts": {
       "test": "RAILS_ENV=test bundle exec rspec",

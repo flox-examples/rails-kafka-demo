@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+echo "==> bundle install"
+bundle install --quiet
+
+echo "==> db:create db:schema:load"
+bin/rails db:create db:schema:load 2>/dev/null || bin/rails db:migrate
+
+echo "==> kafka topics (skipped if Kafka not running)"
+bin/rails kafka:create_topics 2>/dev/null || echo "    Kafka not running — skipping topic setup"
+
+echo "==> setup complete"

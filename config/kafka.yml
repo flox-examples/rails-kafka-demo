@@ -1,0 +1,15 @@
+default: &default
+  brokers: "<%= ENV.fetch('KAFKA_BROKERS', 'localhost:9092') %>"
+  topic_posts_created: "<%= ENV.fetch('KAFKA_TOPIC_POSTS_CREATED', 'posts.created') %>"
+  topic_posts_processed: "<%= ENV.fetch('KAFKA_TOPIC_POSTS_PROCESSED', 'posts.processed') %>"
+  consumer_group: "<%= ENV.fetch('KAFKA_CONSUMER_GROUP', 'rails-kafka-demo') %>"
+  audit_service_url: "<%= ENV.fetch('AUDIT_SERVICE_URL', 'http://localhost:3001') %>"
+
+development:
+  <<: *default
+
+test:
+  <<: *default
+
+production:
+  <<: *default

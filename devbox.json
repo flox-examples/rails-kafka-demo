@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.2/.schema/devbox.schema.json",
+  "packages": [
+    "ruby_3_3@latest",
+    "librdkafka@latest",
+    "pkg-config@latest",
+    "postgresql_16@latest",
+    "apacheKafka@latest",
+    "zlib@latest",
+    "openssl@latest",
+    "gnumake@latest",
+    "gcc@latest"
+  ],
+  "env": {
+    "PGDATA": "$DEVBOX_PROJECT_ROOT/.devbox/postgres/data",
+    "PGHOST": "127.0.0.1",
+    "PGPORT": "5432",
+    "PGUSER": "postgres",
+    "PGPASSWORD": "",
+    "DATABASE_URL": "postgresql://postgres@127.0.0.1:5432/rails_kafka_demo_development",
+    "KAFKA_BROKERS": "localhost:9092",
+    "RAILS_ENV": "development",
+    "USE_SYSTEM_LIBRDKAFKA": "true"
+  },
+  "shell": {
+    "init_hook": [
+      "source .env.local 2>/dev/null || true",
+      "[ -x bin/setup ] && bin/setup"
+    ],
+    "scripts": {
+      "test": "RAILS_ENV=test bundle exec rspec",
+      "lint": "bundle exec rubocop",
+      "consumer": "bundle exec ruby bin/kafka_consumer",
+      "setup": "bin/setup"
+    }
+  }
+}

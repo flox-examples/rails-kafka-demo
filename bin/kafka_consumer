@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+require_relative "../config/environment"
+
+puts "[kafka_consumer] Starting — CTRL-C to stop"
+Kafka::Consumer.run

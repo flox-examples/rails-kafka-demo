@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Initialises and starts Kafka in KRaft mode (no Zookeeper).
+# Called by process-compose; also runnable directly for debugging.
+set -euo pipefail
+
+KAFKA_DIR="${DEVBOX_PROJECT_ROOT:-.}/.devbox/kafka"
+KAFKA_LOGS="${KAFKA_DIR}/logs"
+KAFKA_CONFIG_DIR="${KAFKA_DIR}/config"
+
+mkdir -p "$KAFKA_LOGS" "$KAFKA_CONFIG_DIR"
+
+TEMPLATE="${DEVBOX_PROJECT_ROOT:-.}/config/kafka/kraft-server.properties"
+SERVER_PROPS="${KAFKA_CONFIG_DIR}/server.properties"
+
+if [ ! -f "$SERVER_PROPS" ]; then
+  sed "s|LOG_DIRS_PLACEHOLDER|${KAFKA_LOGS}|g" "$TEMPLATE" > "$SERVER_PROPS"
+  echo "[start-kafka] Generated ${SERVER_PROPS}"
+fi
+
+# Format storage with a stable cluster ID (idempotent after first run)
+if [ ! -f "${KAFKA_LOGS}/meta.properties" ]; then
+  CLUSTER_ID=$(kafka-storage.sh random-uuid)
+  kafka-storage.sh format -t "$CLUSTER_ID" -c "$SERVER_PROPS" --ignore-formatted 2>/dev/null || true
+  echo "[start-kafka] Formatted Kafka storage (cluster_id=${CLUSTER_ID})"
+fi
+
+exec kafka-server-start.sh "$SERVER_PROPS"

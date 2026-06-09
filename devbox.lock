@@ -1,0 +1,59 @@
+{
+  "lockfile_version": "1",
+  "packages": {
+    "apacheKafka@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#apacheKafka",
+      "source": "devbox",
+      "version": "3.9.0"
+    },
+    "gcc@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#gcc",
+      "source": "devbox",
+      "version": "13.3.0"
+    },
+    "gnumake@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#gnumake",
+      "source": "devbox",
+      "version": "4.4.1"
+    },
+    "librdkafka@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#librdkafka",
+      "source": "devbox",
+      "version": "2.6.1"
+    },
+    "openssl@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#openssl",
+      "source": "devbox",
+      "version": "3.3.2"
+    },
+    "pkg-config@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#pkg-config",
+      "source": "devbox",
+      "version": "0.29.2"
+    },
+    "postgresql_16@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#postgresql_16",
+      "source": "devbox",
+      "version": "16.6"
+    },
+    "ruby_3_3@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#ruby_3_3",
+      "source": "devbox",
+      "version": "3.3.7"
+    },
+    "zlib@latest": {
+      "last_modified": "2025-06-01T00:00:00Z",
+      "resolved": "github:NixOS/nixpkgs/nixos-unstable#zlib",
+      "source": "devbox",
+      "version": "1.3.1"
+    }
+  }
+}

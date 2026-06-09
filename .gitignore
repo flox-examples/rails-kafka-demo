@@ -1,0 +1,9 @@
+.bundle/
+log/*.log
+tmp/
+.devbox/postgres/
+.devbox/kafka/
+.env.local
+*.pid
+coverage/
+spec/examples.txt

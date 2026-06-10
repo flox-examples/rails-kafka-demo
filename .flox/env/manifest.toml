@@ -1,69 +1,48 @@
 schema-version = "1.12.0"
 
-# Flox environment mirroring the existing Devbox setup (devbox.json)
-# plus the process-compose services (process-compose.yaml) as native
-# Flox services. The Devbox config is left untouched; this is additive.
+# Composition of reusable FloxHub base environments (flox/ruby,
+# flox/postgresql, flox/kafka). Replaces the inlined services/vars from
+# the `floxify` mirror branch. The repo's devbox.json, process-compose.yaml
+# and bin/* are unchanged and unused by this Flox path.
+
+[include]
+environments = [
+  { remote = "flox/ruby" },
+  { remote = "flox/postgresql" },
+  { remote = "flox/kafka" },
+]
 
 [install]
+# Pin Ruby to 3.3 (overrides flox/ruby's default) and add the native-gem
+# build toolchain (rdkafka + pg compile C extensions; USE_SYSTEM_LIBRDKAFKA
+# links against the rdkafka lib). postgresql + apacheKafka come from the
+# included bases.
 ruby.pkg-path = "ruby_3_3"
 rdkafka.pkg-path = "rdkafka"
 pkg-config.pkg-path = "pkg-config"
-postgresql.pkg-path = "postgresql_16"
-apacheKafka.pkg-path = "apacheKafka"
+gcc.pkg-path = "gcc"
+gnumake.pkg-path = "gnumake"
 zlib.pkg-path = "zlib"
 openssl.pkg-path = "openssl"
-gnumake.pkg-path = "gnumake"
-gcc.pkg-path = "gcc"
 
 [vars]
-PGHOST = "127.0.0.1"
+# Override flox/postgresql defaults so the base provisions the database the
+# app expects (config/database.yml dev reads discrete PG* vars). Setting
+# PGPORT puts the postgres base in TCP mode on 127.0.0.1:5432.
+PGHOSTADDR = "127.0.0.1"
 PGPORT = "5432"
 PGUSER = "postgres"
-PGPASSWORD = ""
-DATABASE_URL = "postgresql://postgres@127.0.0.1:5432/rails_kafka_demo_development"
-KAFKA_BROKERS = "localhost:9092"
+PGDATABASE = "rails_kafka_demo_development"
 RAILS_ENV = "development"
 USE_SYSTEM_LIBRDKAFKA = "true"
-
-[hook]
-on-activate = '''
-# Mirrors devbox.json init_hook + the one PGDATA path that was
-# $DEVBOX_PROJECT_ROOT-relative (now $FLOX_ENV_CACHE-relative).
-export PGDATA="$FLOX_ENV_CACHE/postgres/data"
-source .env.local 2>/dev/null || true
-'''
+# Keep the mirror's manual-bundle behavior (flox/ruby would otherwise run
+# bundle install on every activation).
+RUBY_AUTO_INSTALL = "false"
 
 [profile]
 common = '''
-# Mirrors devbox.json scripts. Note: test() shadows the shell builtin
-# inside this environment, matching `devbox run test` semantics.
 test()     { RAILS_ENV=test bundle exec rspec "$@"; }
 lint()     { bundle exec rubocop "$@"; }
 consumer() { bundle exec ruby bin/kafka_consumer "$@"; }
 setup()    { bin/setup "$@"; }
 '''
-
-[services]
-# Translated from process-compose.yaml. The `command` and `shutdown`
-# fields are mirrored. Flox 1.12 services have no equivalent for
-# process-compose's readiness_probe, depends_on, or availability/restart,
-# so those are dropped (the kafka broker does not truly depend on
-# postgres; only the Rails consumers do). Postgres data lives in
-# $FLOX_ENV_CACHE; kafka reuses bin/start-kafka unchanged (its data stays
-# under .devbox/kafka).
-postgres.command = '''
-export PGDATA="$FLOX_ENV_CACHE/postgres/data"
-mkdir -p "$PGDATA"
-if [ ! -f "$PGDATA/PG_VERSION" ]; then
-  initdb -D "$PGDATA" --auth=trust --username=postgres --no-instructions
-fi
-exec postgres -D "$PGDATA" -h 127.0.0.1 -p "${PGPORT:-5432}"
-'''
-postgres.shutdown.command = '''
-pg_ctl stop -D "$FLOX_ENV_CACHE/postgres/data" -m fast
-'''
-kafka.command = '''
-export DEVBOX_PROJECT_ROOT="$FLOX_ENV_PROJECT"
-exec "$FLOX_ENV_PROJECT/bin/start-kafka"
-'''
-kafka.shutdown.command = "kafka-server-stop.sh"

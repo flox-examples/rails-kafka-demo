@@ -44,10 +44,13 @@ setup()    { bin/setup "$@"; }
 '''
 
 [services]
-# Translated from process-compose.yaml. Flox 1.12 services do not support
-# readiness_probe/depends_on, so those are dropped (Kafka does not truly
-# depend on Postgres). Postgres data lives in $FLOX_ENV_CACHE; Kafka reuses
-# bin/start-kafka unchanged (its data stays under .devbox/kafka).
+# Translated from process-compose.yaml. The `command` and `shutdown`
+# fields are mirrored. Flox 1.12 services have no equivalent for
+# process-compose's readiness_probe, depends_on, or availability/restart,
+# so those are dropped (the kafka broker does not truly depend on
+# postgres; only the Rails consumers do). Postgres data lives in
+# $FLOX_ENV_CACHE; kafka reuses bin/start-kafka unchanged (its data stays
+# under .devbox/kafka).
 postgres.command = '''
 export PGDATA="$FLOX_ENV_CACHE/postgres/data"
 mkdir -p "$PGDATA"
@@ -56,7 +59,11 @@ if [ ! -f "$PGDATA/PG_VERSION" ]; then
 fi
 exec postgres -D "$PGDATA" -h 127.0.0.1 -p "${PGPORT:-5432}"
 '''
+postgres.shutdown.command = '''
+pg_ctl stop -D "$FLOX_ENV_CACHE/postgres/data" -m fast
+'''
 kafka.command = '''
 export DEVBOX_PROJECT_ROOT="$FLOX_ENV_PROJECT"
 exec "$FLOX_ENV_PROJECT/bin/start-kafka"
 '''
+kafka.shutdown.command = "kafka-server-stop.sh"

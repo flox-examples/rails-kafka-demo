@@ -1,0 +1,62 @@
+schema-version = "1.12.0"
+
+# Flox environment mirroring the existing Devbox setup (devbox.json)
+# plus the process-compose services (process-compose.yaml) as native
+# Flox services. The Devbox config is left untouched; this is additive.
+
+[install]
+ruby.pkg-path = "ruby_3_3"
+rdkafka.pkg-path = "rdkafka"
+pkg-config.pkg-path = "pkg-config"
+postgresql.pkg-path = "postgresql_16"
+apacheKafka.pkg-path = "apacheKafka"
+zlib.pkg-path = "zlib"
+openssl.pkg-path = "openssl"
+gnumake.pkg-path = "gnumake"
+gcc.pkg-path = "gcc"
+
+[vars]
+PGHOST = "127.0.0.1"
+PGPORT = "5432"
+PGUSER = "postgres"
+PGPASSWORD = ""
+DATABASE_URL = "postgresql://postgres@127.0.0.1:5432/rails_kafka_demo_development"
+KAFKA_BROKERS = "localhost:9092"
+RAILS_ENV = "development"
+USE_SYSTEM_LIBRDKAFKA = "true"
+
+[hook]
+on-activate = '''
+# Mirrors devbox.json init_hook + the one PGDATA path that was
+# $DEVBOX_PROJECT_ROOT-relative (now $FLOX_ENV_CACHE-relative).
+export PGDATA="$FLOX_ENV_CACHE/postgres/data"
+source .env.local 2>/dev/null || true
+'''
+
+[profile]
+common = '''
+# Mirrors devbox.json scripts. Note: test() shadows the shell builtin
+# inside this environment, matching `devbox run test` semantics.
+test()     { RAILS_ENV=test bundle exec rspec "$@"; }
+lint()     { bundle exec rubocop "$@"; }
+consumer() { bundle exec ruby bin/kafka_consumer "$@"; }
+setup()    { bin/setup "$@"; }
+'''
+
+[services]
+# Translated from process-compose.yaml. Flox 1.12 services do not support
+# readiness_probe/depends_on, so those are dropped (Kafka does not truly
+# depend on Postgres). Postgres data lives in $FLOX_ENV_CACHE; Kafka reuses
+# bin/start-kafka unchanged (its data stays under .devbox/kafka).
+postgres.command = '''
+export PGDATA="$FLOX_ENV_CACHE/postgres/data"
+mkdir -p "$PGDATA"
+if [ ! -f "$PGDATA/PG_VERSION" ]; then
+  initdb -D "$PGDATA" --auth=trust --username=postgres --no-instructions
+fi
+exec postgres -D "$PGDATA" -h 127.0.0.1 -p "${PGPORT:-5432}"
+'''
+kafka.command = '''
+export DEVBOX_PROJECT_ROOT="$FLOX_ENV_PROJECT"
+exec "$FLOX_ENV_PROJECT/bin/start-kafka"
+'''

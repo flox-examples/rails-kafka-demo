@@ -28,10 +28,14 @@ openssl.pkg-path = "openssl"
 [vars]
 # Override flox/postgresql defaults so the base provisions the database the
 # app expects (config/database.yml dev reads discrete PG* vars). Setting
-# PGPORT puts the postgres base in TCP mode on 127.0.0.1:5432.
+# PGPORT puts the postgres base in TCP mode on 127.0.0.1:5432. PGPASS is
+# emptied so the base-generated DATABASE_URL carries no stale placeholder
+# (auth is trust). NOTE: changing PGUSER after first activation requires
+# wiping $FLOX_ENV_CACHE/postgres.
 PGHOSTADDR = "127.0.0.1"
 PGPORT = "5432"
 PGUSER = "postgres"
+PGPASS = ""
 PGDATABASE = "rails_kafka_demo_development"
 RAILS_ENV = "development"
 USE_SYSTEM_LIBRDKAFKA = "true"

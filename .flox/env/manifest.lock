@@ -40,7 +40,7 @@
       "KAFKA_PORT": "9092",
       "PGDATABASE": "rails_kafka_demo_development",
       "PGHOSTADDR": "127.0.0.1",
-      "PGPASS": "pgpass",
+      "PGPASS": "",
       "PGPORT": "5432",
       "PGUSER": "postgres",
       "RAILS_ENV": "development",
@@ -1283,6 +1283,7 @@
       "vars": {
         "PGDATABASE": "rails_kafka_demo_development",
         "PGHOSTADDR": "127.0.0.1",
+        "PGPASS": "",
         "PGPORT": "5432",
         "PGUSER": "postgres",
         "RAILS_ENV": "development",
@@ -1418,6 +1419,15 @@
           "Overriding": [
             "vars",
             "PGHOSTADDR"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "PGPASS"
           ]
         },
         "higher_priority_name": "Current manifest"

@@ -13,7 +13,7 @@ RSpec.describe "Posts", type: :request do
       newer = create(:post, title: "Newer", created_at: 1.minute.ago)
       get "/posts"
       ids = JSON.parse(response.body).map { |p| p["id"] }
-      expect(ids).to eq([newer.id, older.id])
+      expect(ids).to eq([ newer.id, older.id ])
     end
   end
 
@@ -50,7 +50,7 @@ RSpec.describe "Posts", type: :request do
     it "returns the post with audit_logs field" do
       p = create(:post)
       stub_request(:get, /localhost:3001\/audit_logs/)
-        .to_return(status: 200, body: [{ "id" => 1, "post_id" => p.id }].to_json)
+        .to_return(status: 200, body: [ { "id" => 1, "post_id" => p.id } ].to_json)
 
       get "/posts/#{p.id}"
       expect(response).to have_http_status(:ok)

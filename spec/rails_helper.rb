@@ -19,7 +19,7 @@ rescue ActiveRecord::PendingMigrationError => e
 end
 
 RSpec.configure do |config|
-  config.fixture_paths = ["#{RSpec.configuration.file_path}/fixtures"]
+  config.fixture_paths = [ "#{RSpec.configuration.file_path}/fixtures" ]
   config.use_transactional_fixtures = false
   config.infer_spec_type_from_file_location!
   config.filter_rails_from_backtrace!

@@ -8,7 +8,6 @@ Rails.application.configure do
   config.consider_all_requests_local = true
   config.cache_store = :null_store
   config.action_dispatch.show_exceptions = :rescuable
-  config.action_mailer.delivery_method = :test
   config.active_support.deprecation = :stderr
   config.active_support.disallowed_deprecation = :raise
   config.active_support.disallowed_deprecation_warnings = []

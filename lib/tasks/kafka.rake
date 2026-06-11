@@ -5,7 +5,7 @@ namespace :kafka do
   end
 
   desc "Publish a test posts.created event to Kafka"
-  task :publish_test, [:title] => :environment do |_, args|
+  task :publish_test, [ :title ] => :environment do |_, args|
     title = args[:title] || "Test post #{Time.now.to_i}"
     post = Post.create!(title: title, body: "Body created by rake kafka:publish_test")
     puts "Created Post##{post.id} and published posts.created event"
@@ -15,7 +15,7 @@ namespace :kafka do
   task create_topics: :environment do
     config = Rails.application.config_for(:kafka)
     brokers = config["brokers"]
-    topics = [config["topic_posts_created"], config["topic_posts_processed"]]
+    topics = [ config["topic_posts_created"], config["topic_posts_processed"] ]
     topics.each do |topic|
       system("kafka-topics.sh --bootstrap-server #{brokers} " \
              "--create --if-not-exists --topic #{topic} " \

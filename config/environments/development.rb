@@ -6,8 +6,7 @@ Rails.application.configure do
   config.consider_all_requests_local = true
   config.server_timing = true
   config.log_level = :debug
-  config.log_tags = [:request_id]
-  config.action_mailer.raise_delivery_errors = false
+  config.log_tags = [ :request_id ]
   config.active_support.report_deprecations = true
   config.active_record.migration_error = :page_load
   config.active_record.verbose_query_logs = true

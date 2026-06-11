@@ -4,7 +4,8 @@
     "schema-version": "1.12.0",
     "install": {
       "apacheKafka": {
-        "pkg-path": "apacheKafka"
+        "pkg-path": "apacheKafka",
+        "pkg-group": "kafka"
       },
       "gcc": {
         "pkg-path": "gcc"
@@ -19,7 +20,9 @@
         "pkg-path": "pkg-config"
       },
       "postgresql": {
-        "pkg-path": "postgresql_16"
+        "pkg-path": "postgresql",
+        "pkg-group": "postgresql",
+        "outputs": "all"
       },
       "rdkafka": {
         "pkg-path": "rdkafka"
@@ -32,34 +35,34 @@
       }
     },
     "vars": {
-      "DATABASE_URL": "postgresql://postgres@127.0.0.1:5432/rails_kafka_demo_development",
-      "KAFKA_BROKERS": "localhost:9092",
-      "PGHOST": "127.0.0.1",
-      "PGPASSWORD": "",
+      "KAFKA_CONTROLLER_PORT": "9093",
+      "KAFKA_HOST": "localhost",
+      "KAFKA_PORT": "9092",
+      "PGDATABASE": "rails_kafka_demo_development",
+      "PGHOSTADDR": "127.0.0.1",
+      "PGPASS": "",
       "PGPORT": "5432",
       "PGUSER": "postgres",
       "RAILS_ENV": "development",
+      "RUBY_AUTO_INSTALL": "false",
       "USE_SYSTEM_LIBRDKAFKA": "true"
     },
     "hook": {
-      "on-activate": "# Mirrors devbox.json init_hook + the one PGDATA path that was\n# $DEVBOX_PROJECT_ROOT-relative (now $FLOX_ENV_CACHE-relative).\nexport PGDATA=\"$FLOX_ENV_CACHE/postgres/data\"\nsource .env.local 2>/dev/null || true\n"
+      "on-activate": "export RUBY_CACHE=\"$FLOX_ENV_CACHE/ruby\"\nexport BUNDLE_PATH=\"$RUBY_CACHE/vendor\"\nmkdir -p \"$RUBY_CACHE\"\n\nif [ \"$RUBY_AUTO_INSTALL\" = \"true\" ] \\\n    && [ -f Gemfile ] \\\n    && [ -f Gemfile.lock ]; then\n  HASH=$(cat Gemfile Gemfile.lock \\\n    | sha256sum | cut -d\" \" -f1)\n  LAST=$(cat \"$RUBY_CACHE/gems-hash\" 2>/dev/null)\n  if [ \"$HASH\" != \"$LAST\" ]; then\n    bundle install\n    echo \"$HASH\" > \"$RUBY_CACHE/gems-hash\"\n  fi\nfi\n\nexport PGDIR=\"$FLOX_ENV_CACHE/postgres\"\nexport PGDATA=\"$PGDIR/data\"\n\n# Socket dir must be short to stay under the 103-byte\n# unix socket path limit. Use a hash of $PGDIR to keep\n# it unique per environment.\nSOCKETDIR=\"/tmp/flox-pg-$(echo \"$PGDIR\" | cksum | cut -d' ' -f1)\"\n\nif [[ ! -d \"$SOCKETDIR\" ]]; then\n  mkdir -p \"$SOCKETDIR\"\nfi\n\nif [[ -n \"${PGPORT:-}\" ]]; then\n  # TCP mode: PGPORT is set, clients connect via host:port\n  export PGHOST=\"$PGHOSTADDR\"\n  export DATABASE_URL=\"postgresql://$PGUSER:$PGPASS@$PGHOSTADDR:$PGPORT/$PGDATABASE\"\n  PG_LISTEN_FLAGS=\"-c listen_addresses=$PGHOSTADDR -p $PGPORT\"\nelse\n  # Socket mode: no PGPORT, clients connect via unix socket\n  unset PGHOSTADDR\n  export PGHOST=\"$SOCKETDIR\"\n  export DATABASE_URL=\"postgresql:///$PGDATABASE?host=$SOCKETDIR\"\n  PG_LISTEN_FLAGS=\"\"\nfi\n\nINIT_LOG=\"$PGDIR/init.log\"\n\npg_init_fail() {\n  echo \"ERROR: PostgreSQL initialization failed.\" >&2\n  if [ -f \"$INIT_LOG\" ]; then\n    echo \"--- init.log ---\" >&2\n    cat \"$INIT_LOG\" >&2\n    echo \"--- end init.log ---\" >&2\n  fi\n  exit 1\n}\n\nif [[ ! -d \"$PGDATA\" ]]; then\n  mkdir -p \"$PGDATA\"\n  initdb \"$PGDATA\" \\\n    --locale=C \\\n    --encoding=UTF8 \\\n    --auth=trust \\\n    --username \"$PGUSER\" \\\n    >> \"$INIT_LOG\" 2>&1 \\\n    || pg_init_fail\nfi\n\npg_ctl -D \"$PGDATA\" -w start \\\n  -o \"-c unix_socket_directories=$SOCKETDIR $PG_LISTEN_FLAGS\" \\\n  >> \"$INIT_LOG\" 2>&1 \\\n  || pg_init_fail\nif psql -lqt | cut -d \\| -f 1 | grep -qw \"$PGDATABASE\"; then\n  true\nelse\n  createdb >> \"$INIT_LOG\" 2>&1 || pg_init_fail\nfi\npg_ctl -D \"$PGDATA\" -m fast -w stop >> \"$INIT_LOG\" 2>&1\nrm -f \"$INIT_LOG\"\n\nexport KAFKA_CACHE=\"$FLOX_ENV_CACHE/kafka\"\nexport KAFKA_LOG_DIRS=\"$KAFKA_CACHE/logs\"\nexport KAFKA_CONFIG_FILE=\"$KAFKA_CACHE/server.properties\"\n# Derive the broker list from host/port so overriding either stays\n# consistent; respects an explicit KAFKA_BROKERS override if set.\nexport KAFKA_BROKERS=\"${KAFKA_BROKERS:-${KAFKA_HOST}:${KAFKA_PORT}}\"\n\nmkdir -p \"$KAFKA_LOG_DIRS\"\n\nif [ ! -f \"$KAFKA_CONFIG_FILE\" ]; then\n  cat > \"$KAFKA_CONFIG_FILE\" <<EOF\nprocess.roles=broker,controller\nnode.id=1\ncontroller.quorum.voters=1@${KAFKA_HOST}:${KAFKA_CONTROLLER_PORT}\nlisteners=PLAINTEXT://${KAFKA_HOST}:${KAFKA_PORT},CONTROLLER://${KAFKA_HOST}:${KAFKA_CONTROLLER_PORT}\ninter.broker.listener.name=PLAINTEXT\nadvertised.listeners=PLAINTEXT://${KAFKA_HOST}:${KAFKA_PORT}\ncontroller.listener.names=CONTROLLER\nlistener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT\nlog.dirs=${KAFKA_LOG_DIRS}\nnum.network.threads=3\nnum.io.threads=8\nsocket.send.buffer.bytes=102400\nsocket.receive.buffer.bytes=102400\nsocket.request.max.bytes=104857600\nnum.partitions=1\nnum.recovery.threads.per.data.dir=1\noffsets.topic.replication.factor=1\ntransaction.state.log.replication.factor=1\ntransaction.state.log.min.isr=1\ndefault.replication.factor=1\nmin.insync.replicas=1\nlog.retention.hours=168\nlog.segment.bytes=1073741824\nlog.retention.check.interval.ms=300000\nEOF\nfi\n\nif [ ! -f \"${KAFKA_LOG_DIRS}/meta.properties\" ]; then\n  CLUSTER_ID=\"$(kafka-storage.sh random-uuid)\"\n  kafka-storage.sh format -t \"$CLUSTER_ID\" -c \"$KAFKA_CONFIG_FILE\" --ignore-formatted\nfi\n"
     },
     "profile": {
-      "common": "# Mirrors devbox.json scripts. Note: test() shadows the shell builtin\n# inside this environment, matching `devbox run test` semantics.\ntest()     { RAILS_ENV=test bundle exec rspec \"$@\"; }\nlint()     { bundle exec rubocop \"$@\"; }\nconsumer() { bundle exec ruby bin/kafka_consumer \"$@\"; }\nsetup()    { bin/setup \"$@\"; }\n"
+      "common": "test()     { RAILS_ENV=test bundle exec rspec \"$@\"; }\nlint()     { bundle exec rubocop \"$@\"; }\nconsumer() { bundle exec ruby bin/kafka_consumer \"$@\"; }\nsetup()    { bin/setup \"$@\"; }\n"
     },
     "options": {},
     "services": {
       "kafka": {
-        "command": "export DEVBOX_PROJECT_ROOT=\"$FLOX_ENV_PROJECT\"\nexec \"$FLOX_ENV_PROJECT/bin/start-kafka\"\n",
+        "command": "  exec kafka-server-start.sh \"$KAFKA_CONFIG_FILE\"\n",
         "shutdown": {
           "command": "kafka-server-stop.sh"
         }
       },
       "postgres": {
-        "command": "export PGDATA=\"$FLOX_ENV_CACHE/postgres/data\"\nmkdir -p \"$PGDATA\"\nif [ ! -f \"$PGDATA/PG_VERSION\" ]; then\n  initdb -D \"$PGDATA\" --auth=trust --username=postgres --no-instructions\nfi\nexec postgres -D \"$PGDATA\" -h 127.0.0.1 -p \"${PGPORT:-5432}\"\n",
-        "shutdown": {
-          "command": "pg_ctl stop -D \"$FLOX_ENV_CACHE/postgres/data\" -m fast\n"
-        }
+        "command": "  PGDATA=\"$FLOX_ENV_CACHE/postgres/data\"\n  SOCKETDIR=\"/tmp/flox-pg-$(echo \"$FLOX_ENV_CACHE/postgres\" | cksum | cut -d' ' -f1)\"\n  mkdir -p \"$SOCKETDIR\"\n  if [[ -n \"${PGPORT:-}\" ]]; then\n    exec postgres -D \"$PGDATA\" -c unix_socket_directories=\"$SOCKETDIR\" -c listen_addresses=\"$PGHOSTADDR\" -p \"$PGPORT\"\n  else\n    exec postgres -D \"$PGDATA\" -c unix_socket_directories=\"$SOCKETDIR\" -c listen_addresses=\"\"\n  fi\n"
       }
     }
   },
@@ -90,7 +93,7 @@
         "out": "/nix/store/3s08waf8skk5gp8d5hlxy1wfj6j5gr5l-apache-kafka-2.13-4.2.0"
       },
       "system": "aarch64-darwin",
-      "group": "toplevel",
+      "group": "kafka",
       "priority": 5
     },
     {
@@ -119,7 +122,7 @@
         "out": "/nix/store/c21kyxjw6gdsqdqhrcifp8x4bffc9l8c-apache-kafka-2.13-4.2.0"
       },
       "system": "aarch64-linux",
-      "group": "toplevel",
+      "group": "kafka",
       "priority": 5
     },
     {
@@ -148,7 +151,7 @@
         "out": "/nix/store/vindlv625ha5rhi0mc4lkgax52za6r93-apache-kafka-2.13-4.2.0"
       },
       "system": "x86_64-darwin",
-      "group": "toplevel",
+      "group": "kafka",
       "priority": 5
     },
     {
@@ -177,7 +180,163 @@
         "out": "/nix/store/fpkx5a2cz4jkl8r1dslbk3jf9jgf2mbg-apache-kafka-2.13-4.2.0"
       },
       "system": "x86_64-linux",
-      "group": "toplevel",
+      "group": "kafka",
+      "priority": 5
+    },
+    {
+      "attr_path": "postgresql",
+      "broken": false,
+      "derivation": "/nix/store/kp8iay7c452pay6v8h57z3f3w1mc7145-postgresql-17.10.drv",
+      "description": "Powerful, open source object-relational database system",
+      "install_id": "postgresql",
+      "license": "PostgreSQL",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "name": "postgresql-17.10",
+      "pname": "postgresql",
+      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "rev_count": 1011622,
+      "rev_date": "2026-06-06T12:30:50Z",
+      "scrape_date": "2026-06-08T03:14:59.938487Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "17.10",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/y2yfqp710f5ggzj972wvdw27c4465g9b-postgresql-17.10-dev",
+        "doc": "/nix/store/rbd7809q978mm98d2ah6q06hh1fak4g3-postgresql-17.10-doc",
+        "jit": "/nix/store/jvvc8129hqsxvwxdvhgz8jhsajbyci9s-postgresql-17.10-jit",
+        "lib": "/nix/store/chrd4xzfvh20skzq21p5q96cm1hwsr91-postgresql-17.10-lib",
+        "man": "/nix/store/fbqgpjlxp8kjlln7f2rqlidz86dq1dxj-postgresql-17.10-man",
+        "out": "/nix/store/k5mjkij9d9fcikm1pshcads63fsyf08r-postgresql-17.10",
+        "plperl": "/nix/store/jfdxbynhcf8a69s2b9k2sm0yicdy9chb-postgresql-17.10-plperl",
+        "plpython3": "/nix/store/x8kr0c530y07ml1f2k2q1h70j2bi5ndm-postgresql-17.10-plpython3",
+        "pltcl": "/nix/store/xnqihgavm8j2p3bxrhx21v0cr4w4bvyq-postgresql-17.10-pltcl"
+      },
+      "system": "aarch64-darwin",
+      "group": "postgresql",
+      "priority": 5
+    },
+    {
+      "attr_path": "postgresql",
+      "broken": false,
+      "derivation": "/nix/store/i0y61fv12g4frgynb4pnc7zm44f3iswn-postgresql-17.10.drv",
+      "description": "Powerful, open source object-relational database system",
+      "install_id": "postgresql",
+      "license": "PostgreSQL",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "name": "postgresql-17.10",
+      "pname": "postgresql",
+      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "rev_count": 1011622,
+      "rev_date": "2026-06-06T12:30:50Z",
+      "scrape_date": "2026-06-08T03:47:51.887374Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "17.10",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/dbbqlaba1d5db0l4a5xlgzvkk16bb1ql-postgresql-17.10-debug",
+        "dev": "/nix/store/ckkjpnmpd0lgs28bhq76ffbknkbw0r2l-postgresql-17.10-dev",
+        "doc": "/nix/store/srbnmzjyc6fq3bp33lxv7185d85g44bg-postgresql-17.10-doc",
+        "jit": "/nix/store/08a4srs7r0mskz9qnzd00h5h00008v4q-postgresql-17.10-jit",
+        "lib": "/nix/store/bs4ds2zwwfjnp2bz2nqpbm3jc1xw2f76-postgresql-17.10-lib",
+        "man": "/nix/store/954b3d8ksbv0s2jh3p4a0i9jfcj4f1j3-postgresql-17.10-man",
+        "out": "/nix/store/cyh24i9352vrbk53nx4lvq1m98ff8aii-postgresql-17.10",
+        "plperl": "/nix/store/qrwc6i1vnfhl95dy5hq9172429yf0i4w-postgresql-17.10-plperl",
+        "plpython3": "/nix/store/xzhgi5yphr8awiw5ji2nmqdzqxdjshqx-postgresql-17.10-plpython3",
+        "pltcl": "/nix/store/3xqvyngzy2hxckg1q4d6sbn7grj8kmnm-postgresql-17.10-pltcl"
+      },
+      "system": "aarch64-linux",
+      "group": "postgresql",
+      "priority": 5
+    },
+    {
+      "attr_path": "postgresql",
+      "broken": false,
+      "derivation": "/nix/store/f48lnpbd2qa77s0gj3hnd9ix1alm5qx0-postgresql-17.10.drv",
+      "description": "Powerful, open source object-relational database system",
+      "install_id": "postgresql",
+      "license": "PostgreSQL",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "name": "postgresql-17.10",
+      "pname": "postgresql",
+      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "rev_count": 1011622,
+      "rev_date": "2026-06-06T12:30:50Z",
+      "scrape_date": "2026-06-08T04:18:24.478836Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "17.10",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "dev": "/nix/store/3f6llql2ck6q7gnnyz0ysrrwkv2gghky-postgresql-17.10-dev",
+        "doc": "/nix/store/1235f75980ib2z42isq8w00css1n4f66-postgresql-17.10-doc",
+        "jit": "/nix/store/sax9v31mpzjxngi20jwfhy32hn1d1anm-postgresql-17.10-jit",
+        "lib": "/nix/store/s3fshal7dhhmbcsm336fghkq6bzd70lq-postgresql-17.10-lib",
+        "man": "/nix/store/rg1kk7km61j8z1j6wbz3cv76zdccijp0-postgresql-17.10-man",
+        "out": "/nix/store/2d6cqkal090xcmk7vpkvh24sl3infbby-postgresql-17.10",
+        "plperl": "/nix/store/rbdah6bn3zm84inf5b5aqyshvri7d7lz-postgresql-17.10-plperl",
+        "plpython3": "/nix/store/7bli73px1dfsfy1fwsxs30yxq17kvaxs-postgresql-17.10-plpython3",
+        "pltcl": "/nix/store/s0flr58ascaiv0mlvwfgq2gmpzgy277a-postgresql-17.10-pltcl"
+      },
+      "system": "x86_64-darwin",
+      "group": "postgresql",
+      "priority": 5
+    },
+    {
+      "attr_path": "postgresql",
+      "broken": false,
+      "derivation": "/nix/store/bzq599041h93ncxgbc4867hrzjpva3dq-postgresql-17.10.drv",
+      "description": "Powerful, open source object-relational database system",
+      "install_id": "postgresql",
+      "license": "PostgreSQL",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "name": "postgresql-17.10",
+      "pname": "postgresql",
+      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
+      "rev_count": 1011622,
+      "rev_date": "2026-06-06T12:30:50Z",
+      "scrape_date": "2026-06-08T04:54:20.500763Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "17.10",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/lfgkjigmsr1pyyyf42d5ilnc003bjxn7-postgresql-17.10-debug",
+        "dev": "/nix/store/2y8a47fzhkibnfy5lzrv16ylj5rn2pj7-postgresql-17.10-dev",
+        "doc": "/nix/store/c8wad1x0pmvysnfkz5d9rcpb872qc2j7-postgresql-17.10-doc",
+        "jit": "/nix/store/phskfynzln3q5qhc1m0i2g7n585129yn-postgresql-17.10-jit",
+        "lib": "/nix/store/h0mwgi47x8cmwyfqgbi3spsyr8hwidn0-postgresql-17.10-lib",
+        "man": "/nix/store/csjq4w1qavdihdq7hywbr0cdf2rzpfz9-postgresql-17.10-man",
+        "out": "/nix/store/8zm2sma9jgvq101yy4x45za4y28yd164-postgresql-17.10",
+        "plperl": "/nix/store/h98zq6zgf63dwix04cp93c0m3wk29acy-postgresql-17.10-plperl",
+        "plpython3": "/nix/store/wy8i0s38mq87j1cbq69i950rb26z7pz1-postgresql-17.10-plpython3",
+        "pltcl": "/nix/store/dd2j50hn9p1capz9kqcbj1773v4agpfj-postgresql-17.10-pltcl"
+      },
+      "system": "x86_64-linux",
+      "group": "postgresql",
       "priority": 5
     },
     {
@@ -721,160 +880,6 @@
       "priority": 5
     },
     {
-      "attr_path": "postgresql_16",
-      "broken": false,
-      "derivation": "/nix/store/x7cj2yh37p5shq90s03la7cjjfwy93d0-postgresql-16.14.drv",
-      "description": "Powerful, open source object-relational database system",
-      "install_id": "postgresql",
-      "license": "PostgreSQL",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "name": "postgresql-16.14",
-      "pname": "postgresql_16",
-      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "rev_count": 1011622,
-      "rev_date": "2026-06-06T12:30:50Z",
-      "scrape_date": "2026-06-08T03:15:00.813762Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "16.14",
-      "outputs_to_install": [
-        "man",
-        "out"
-      ],
-      "outputs": {
-        "dev": "/nix/store/gbnqi863zgk4v9g1hv7rr4p4gcilx6z7-postgresql-16.14-dev",
-        "doc": "/nix/store/djgx3412f1gb0anfmbxw6z40lswpmjq0-postgresql-16.14-doc",
-        "jit": "/nix/store/skrhkgxkrrzrfchqakm9mynvwb6cr739-postgresql-16.14-jit",
-        "lib": "/nix/store/k62n44c7rcnbm65977cjplkwcsdxka1c-postgresql-16.14-lib",
-        "man": "/nix/store/lf1szhvg6h047qbxz65bhj4ig4prk8a2-postgresql-16.14-man",
-        "out": "/nix/store/9pskiqh3nf30x427ksy9aw4f7x9ycq41-postgresql-16.14",
-        "plperl": "/nix/store/x3jxva2r1w1qzlw5v9pa083ljhkr19h7-postgresql-16.14-plperl",
-        "plpython3": "/nix/store/3ayf52ikay2cgms01xqys0r3g3ycxzyi-postgresql-16.14-plpython3",
-        "pltcl": "/nix/store/sb42vpk85zk8i70k790v3d6rwvadq2v4-postgresql-16.14-pltcl"
-      },
-      "system": "aarch64-darwin",
-      "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "postgresql_16",
-      "broken": false,
-      "derivation": "/nix/store/11qih4cyxz730b9nn0kf9l0b4nydpmgz-postgresql-16.14.drv",
-      "description": "Powerful, open source object-relational database system",
-      "install_id": "postgresql",
-      "license": "PostgreSQL",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "name": "postgresql-16.14",
-      "pname": "postgresql_16",
-      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "rev_count": 1011622,
-      "rev_date": "2026-06-06T12:30:50Z",
-      "scrape_date": "2026-06-08T03:47:52.903644Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "16.14",
-      "outputs_to_install": [
-        "man",
-        "out"
-      ],
-      "outputs": {
-        "debug": "/nix/store/wh6b3jjqbsylcgjfsahc289rw8prqkzp-postgresql-16.14-debug",
-        "dev": "/nix/store/r8pcgl1l04i0x7dyx18k5rpm6k53jnxh-postgresql-16.14-dev",
-        "doc": "/nix/store/1wv37ycl2isavz7q0bj1qak1wjgvvvw4-postgresql-16.14-doc",
-        "jit": "/nix/store/qy6cdwyqwsvgkaxq4nw1g6g49y66aab3-postgresql-16.14-jit",
-        "lib": "/nix/store/shi2ybxap04q3sgzsrdnk2m0q7mycvl5-postgresql-16.14-lib",
-        "man": "/nix/store/3lry9ln13619sqpc5qm654xkrydyv38m-postgresql-16.14-man",
-        "out": "/nix/store/dm3wj3zzx5sdbs6yw6fc22bysnvg09sn-postgresql-16.14",
-        "plperl": "/nix/store/k6av8m7sfrnp8cjd4igb5m26m3r07w4i-postgresql-16.14-plperl",
-        "plpython3": "/nix/store/ra8c661xszfg9zkfymfxpa47dvvs07i1-postgresql-16.14-plpython3",
-        "pltcl": "/nix/store/kzrhi49ih06fragsxbq5ji0n2cfws3w9-postgresql-16.14-pltcl"
-      },
-      "system": "aarch64-linux",
-      "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "postgresql_16",
-      "broken": false,
-      "derivation": "/nix/store/f4fllgsz9dkr6bl42axpm8mz8686faqp-postgresql-16.14.drv",
-      "description": "Powerful, open source object-relational database system",
-      "install_id": "postgresql",
-      "license": "PostgreSQL",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "name": "postgresql-16.14",
-      "pname": "postgresql_16",
-      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "rev_count": 1011622,
-      "rev_date": "2026-06-06T12:30:50Z",
-      "scrape_date": "2026-06-08T04:18:25.286240Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "16.14",
-      "outputs_to_install": [
-        "man",
-        "out"
-      ],
-      "outputs": {
-        "dev": "/nix/store/3fhgzv04f6civsdv5x53gl18vqxnbq3f-postgresql-16.14-dev",
-        "doc": "/nix/store/iv7x0li53hj4i2hgya80ilqqpswa2gnc-postgresql-16.14-doc",
-        "jit": "/nix/store/l70v6h6h5swlp39r8kbxci3ks0nfa435-postgresql-16.14-jit",
-        "lib": "/nix/store/krznhz572jlrdqik42q61ycvs5rjzvky-postgresql-16.14-lib",
-        "man": "/nix/store/1a1llcy146zga9niq94as5gzii6lfmpm-postgresql-16.14-man",
-        "out": "/nix/store/6l5ih12n6l6yfs5ghnfdhdgmfxinv3sg-postgresql-16.14",
-        "plperl": "/nix/store/06n4dvymqlwv5c0jisxphwvxxyriqf40-postgresql-16.14-plperl",
-        "plpython3": "/nix/store/9hl5ghfpw59sahwchlbvjnq1l9iz6n5y-postgresql-16.14-plpython3",
-        "pltcl": "/nix/store/rwk6z7xzck4rv9cml4yaqdas86li5r9z-postgresql-16.14-pltcl"
-      },
-      "system": "x86_64-darwin",
-      "group": "toplevel",
-      "priority": 5
-    },
-    {
-      "attr_path": "postgresql_16",
-      "broken": false,
-      "derivation": "/nix/store/x14dq97syz6ggcdbwgyg64clmlb4alsz-postgresql-16.14.drv",
-      "description": "Powerful, open source object-relational database system",
-      "install_id": "postgresql",
-      "license": "PostgreSQL",
-      "locked_url": "https://github.com/flox/nixpkgs?rev=a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "name": "postgresql-16.14",
-      "pname": "postgresql_16",
-      "rev": "a799d3e3886da994fa307f817a6bc705ae538eeb",
-      "rev_count": 1011622,
-      "rev_date": "2026-06-06T12:30:50Z",
-      "scrape_date": "2026-06-08T04:54:21.582660Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "16.14",
-      "outputs_to_install": [
-        "man",
-        "out"
-      ],
-      "outputs": {
-        "debug": "/nix/store/sswf8jxvb9dij8pzydkhl4napv182wip-postgresql-16.14-debug",
-        "dev": "/nix/store/v43qxcav9dx5lbicrvc4g1487wb9i8wb-postgresql-16.14-dev",
-        "doc": "/nix/store/wikzy8wvag9zf0bjpnk8wqcq96mdq73g-postgresql-16.14-doc",
-        "jit": "/nix/store/l2db96fd0lcrr86sp5j287m57waq0fx0-postgresql-16.14-jit",
-        "lib": "/nix/store/r0zrw8z0jn3m4d9smcpfw599b3jyy3ba-postgresql-16.14-lib",
-        "man": "/nix/store/1wky7pacchcqvx7k7fdhqcxbxhbbxgr2-postgresql-16.14-man",
-        "out": "/nix/store/si4kyr4wkj5nz158z3679iws9gh57ysf-postgresql-16.14",
-        "plperl": "/nix/store/7545h4cjry8vb62v6bmaywqds0r7jrl1-postgresql-16.14-plperl",
-        "plpython3": "/nix/store/90pzcf8xw5fhpdrh5z9zs12swrm7ali0-postgresql-16.14-plpython3",
-        "pltcl": "/nix/store/6148xp45xdy5iimfvnm5y85ix4ss1m29-postgresql-16.14-pltcl"
-      },
-      "system": "x86_64-linux",
-      "group": "toplevel",
-      "priority": 5
-    },
-    {
       "attr_path": "rdkafka",
       "broken": false,
       "derivation": "/nix/store/xil1s823lazn874lqh1rxiladi0wvljd-rdkafka-2.13.0.drv",
@@ -1248,5 +1253,203 @@
       "group": "toplevel",
       "priority": 5
     }
-  ]
+  ],
+  "compose": {
+    "composer": {
+      "schema-version": "1.12.0",
+      "install": {
+        "gcc": {
+          "pkg-path": "gcc"
+        },
+        "gnumake": {
+          "pkg-path": "gnumake"
+        },
+        "openssl": {
+          "pkg-path": "openssl"
+        },
+        "pkg-config": {
+          "pkg-path": "pkg-config"
+        },
+        "rdkafka": {
+          "pkg-path": "rdkafka"
+        },
+        "ruby": {
+          "pkg-path": "ruby_3_3"
+        },
+        "zlib": {
+          "pkg-path": "zlib"
+        }
+      },
+      "vars": {
+        "PGDATABASE": "rails_kafka_demo_development",
+        "PGHOSTADDR": "127.0.0.1",
+        "PGPASS": "",
+        "PGPORT": "5432",
+        "PGUSER": "postgres",
+        "RAILS_ENV": "development",
+        "RUBY_AUTO_INSTALL": "false",
+        "USE_SYSTEM_LIBRDKAFKA": "true"
+      },
+      "profile": {
+        "common": "test()     { RAILS_ENV=test bundle exec rspec \"$@\"; }\nlint()     { bundle exec rubocop \"$@\"; }\nconsumer() { bundle exec ruby bin/kafka_consumer \"$@\"; }\nsetup()    { bin/setup \"$@\"; }\n"
+      },
+      "options": {},
+      "include": {
+        "environments": [
+          {
+            "remote": "flox/ruby"
+          },
+          {
+            "remote": "flox/postgresql"
+          },
+          {
+            "remote": "flox/kafka"
+          }
+        ]
+      }
+    },
+    "include": [
+      {
+        "manifest": {
+          "schema-version": "1.10.0",
+          "install": {
+            "ruby": {
+              "pkg-path": "ruby",
+              "pkg-group": "ruby"
+            }
+          },
+          "vars": {
+            "RUBY_AUTO_INSTALL": "true"
+          },
+          "hook": {
+            "on-activate": "export RUBY_CACHE=\"$FLOX_ENV_CACHE/ruby\"\nexport BUNDLE_PATH=\"$RUBY_CACHE/vendor\"\nmkdir -p \"$RUBY_CACHE\"\n\nif [ \"$RUBY_AUTO_INSTALL\" = \"true\" ] \\\n    && [ -f Gemfile ] \\\n    && [ -f Gemfile.lock ]; then\n  HASH=$(cat Gemfile Gemfile.lock \\\n    | sha256sum | cut -d\" \" -f1)\n  LAST=$(cat \"$RUBY_CACHE/gems-hash\" 2>/dev/null)\n  if [ \"$HASH\" != \"$LAST\" ]; then\n    bundle install\n    echo \"$HASH\" > \"$RUBY_CACHE/gems-hash\"\n  fi\nfi\n"
+          },
+          "options": {}
+        },
+        "name": "ruby",
+        "descriptor": {
+          "remote": "flox/ruby"
+        }
+      },
+      {
+        "manifest": {
+          "schema-version": "1.10.0",
+          "install": {
+            "postgresql": {
+              "pkg-path": "postgresql",
+              "pkg-group": "postgresql",
+              "outputs": "all"
+            }
+          },
+          "vars": {
+            "PGDATABASE": "pgdb",
+            "PGHOSTADDR": "127.0.0.1",
+            "PGPASS": "pgpass",
+            "PGUSER": "pguser"
+          },
+          "hook": {
+            "on-activate": "export PGDIR=\"$FLOX_ENV_CACHE/postgres\"\nexport PGDATA=\"$PGDIR/data\"\n\n# Socket dir must be short to stay under the 103-byte\n# unix socket path limit. Use a hash of $PGDIR to keep\n# it unique per environment.\nSOCKETDIR=\"/tmp/flox-pg-$(echo \"$PGDIR\" | cksum | cut -d' ' -f1)\"\n\nif [[ ! -d \"$SOCKETDIR\" ]]; then\n  mkdir -p \"$SOCKETDIR\"\nfi\n\nif [[ -n \"${PGPORT:-}\" ]]; then\n  # TCP mode: PGPORT is set, clients connect via host:port\n  export PGHOST=\"$PGHOSTADDR\"\n  export DATABASE_URL=\"postgresql://$PGUSER:$PGPASS@$PGHOSTADDR:$PGPORT/$PGDATABASE\"\n  PG_LISTEN_FLAGS=\"-c listen_addresses=$PGHOSTADDR -p $PGPORT\"\nelse\n  # Socket mode: no PGPORT, clients connect via unix socket\n  unset PGHOSTADDR\n  export PGHOST=\"$SOCKETDIR\"\n  export DATABASE_URL=\"postgresql:///$PGDATABASE?host=$SOCKETDIR\"\n  PG_LISTEN_FLAGS=\"\"\nfi\n\nINIT_LOG=\"$PGDIR/init.log\"\n\npg_init_fail() {\n  echo \"ERROR: PostgreSQL initialization failed.\" >&2\n  if [ -f \"$INIT_LOG\" ]; then\n    echo \"--- init.log ---\" >&2\n    cat \"$INIT_LOG\" >&2\n    echo \"--- end init.log ---\" >&2\n  fi\n  exit 1\n}\n\nif [[ ! -d \"$PGDATA\" ]]; then\n  mkdir -p \"$PGDATA\"\n  initdb \"$PGDATA\" \\\n    --locale=C \\\n    --encoding=UTF8 \\\n    --auth=trust \\\n    --username \"$PGUSER\" \\\n    >> \"$INIT_LOG\" 2>&1 \\\n    || pg_init_fail\nfi\n\npg_ctl -D \"$PGDATA\" -w start \\\n  -o \"-c unix_socket_directories=$SOCKETDIR $PG_LISTEN_FLAGS\" \\\n  >> \"$INIT_LOG\" 2>&1 \\\n  || pg_init_fail\nif psql -lqt | cut -d \\| -f 1 | grep -qw \"$PGDATABASE\"; then\n  true\nelse\n  createdb >> \"$INIT_LOG\" 2>&1 || pg_init_fail\nfi\npg_ctl -D \"$PGDATA\" -m fast -w stop >> \"$INIT_LOG\" 2>&1\nrm -f \"$INIT_LOG\"\n"
+          },
+          "options": {},
+          "services": {
+            "postgres": {
+              "command": "  PGDATA=\"$FLOX_ENV_CACHE/postgres/data\"\n  SOCKETDIR=\"/tmp/flox-pg-$(echo \"$FLOX_ENV_CACHE/postgres\" | cksum | cut -d' ' -f1)\"\n  mkdir -p \"$SOCKETDIR\"\n  if [[ -n \"${PGPORT:-}\" ]]; then\n    exec postgres -D \"$PGDATA\" -c unix_socket_directories=\"$SOCKETDIR\" -c listen_addresses=\"$PGHOSTADDR\" -p \"$PGPORT\"\n  else\n    exec postgres -D \"$PGDATA\" -c unix_socket_directories=\"$SOCKETDIR\" -c listen_addresses=\"\"\n  fi\n"
+            }
+          }
+        },
+        "name": "postgresql",
+        "descriptor": {
+          "remote": "flox/postgresql"
+        }
+      },
+      {
+        "manifest": {
+          "schema-version": "1.12.0",
+          "install": {
+            "apacheKafka": {
+              "pkg-path": "apacheKafka",
+              "pkg-group": "kafka"
+            }
+          },
+          "vars": {
+            "KAFKA_CONTROLLER_PORT": "9093",
+            "KAFKA_HOST": "localhost",
+            "KAFKA_PORT": "9092"
+          },
+          "hook": {
+            "on-activate": "export KAFKA_CACHE=\"$FLOX_ENV_CACHE/kafka\"\nexport KAFKA_LOG_DIRS=\"$KAFKA_CACHE/logs\"\nexport KAFKA_CONFIG_FILE=\"$KAFKA_CACHE/server.properties\"\n# Derive the broker list from host/port so overriding either stays\n# consistent; respects an explicit KAFKA_BROKERS override if set.\nexport KAFKA_BROKERS=\"${KAFKA_BROKERS:-${KAFKA_HOST}:${KAFKA_PORT}}\"\n\nmkdir -p \"$KAFKA_LOG_DIRS\"\n\nif [ ! -f \"$KAFKA_CONFIG_FILE\" ]; then\n  cat > \"$KAFKA_CONFIG_FILE\" <<EOF\nprocess.roles=broker,controller\nnode.id=1\ncontroller.quorum.voters=1@${KAFKA_HOST}:${KAFKA_CONTROLLER_PORT}\nlisteners=PLAINTEXT://${KAFKA_HOST}:${KAFKA_PORT},CONTROLLER://${KAFKA_HOST}:${KAFKA_CONTROLLER_PORT}\ninter.broker.listener.name=PLAINTEXT\nadvertised.listeners=PLAINTEXT://${KAFKA_HOST}:${KAFKA_PORT}\ncontroller.listener.names=CONTROLLER\nlistener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT\nlog.dirs=${KAFKA_LOG_DIRS}\nnum.network.threads=3\nnum.io.threads=8\nsocket.send.buffer.bytes=102400\nsocket.receive.buffer.bytes=102400\nsocket.request.max.bytes=104857600\nnum.partitions=1\nnum.recovery.threads.per.data.dir=1\noffsets.topic.replication.factor=1\ntransaction.state.log.replication.factor=1\ntransaction.state.log.min.isr=1\ndefault.replication.factor=1\nmin.insync.replicas=1\nlog.retention.hours=168\nlog.segment.bytes=1073741824\nlog.retention.check.interval.ms=300000\nEOF\nfi\n\nif [ ! -f \"${KAFKA_LOG_DIRS}/meta.properties\" ]; then\n  CLUSTER_ID=\"$(kafka-storage.sh random-uuid)\"\n  kafka-storage.sh format -t \"$CLUSTER_ID\" -c \"$KAFKA_CONFIG_FILE\" --ignore-formatted\nfi\n"
+          },
+          "options": {},
+          "services": {
+            "kafka": {
+              "command": "  exec kafka-server-start.sh \"$KAFKA_CONFIG_FILE\"\n",
+              "shutdown": {
+                "command": "kafka-server-stop.sh"
+              }
+            }
+          }
+        },
+        "name": "kafka",
+        "descriptor": {
+          "remote": "flox/kafka"
+        }
+      }
+    ],
+    "warnings": [
+      {
+        "warning": {
+          "Overriding": [
+            "install",
+            "ruby"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "PGDATABASE"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "PGHOSTADDR"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "PGPASS"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "PGUSER"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      },
+      {
+        "warning": {
+          "Overriding": [
+            "vars",
+            "RUBY_AUTO_INSTALL"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      }
+    ]
+  }
 }

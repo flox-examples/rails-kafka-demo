@@ -24,10 +24,11 @@ events published here and exposes a query API that this app calls back.
 
 ## Prerequisites
 
-Install [Flox](https://flox.dev/docs/install-flox/):
+Install [Flox](https://flox.dev/docs/install-flox/) — follow the instructions for your
+platform. On macOS:
 
 ```bash
-curl -fsSL https://install.flox.dev | bash
+brew install flox
 ```
 
 ---
@@ -56,9 +57,10 @@ bin/setup
 bin/rails server -p 3000
 ```
 
-In a second terminal (still inside `flox activate`):
+In a second terminal:
 ```bash
-# Start the Kafka consumer
+cd rails-kafka-demo
+flox activate
 bin/kafka_consumer
 ```
 

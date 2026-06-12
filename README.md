@@ -4,7 +4,7 @@ A production-shaped Rails 7 + Postgres + Kafka app, configured with **Flox** as 
 baseline dev environment. It serves as the primary service in a two-repo demo that shows
 cross-repo Kafka event flow and shared config.
 
-The companion repo is **[kafka-audit-service](../kafka-audit-service)**, which consumes
+The companion repo is **[kafka-audit-service](https://github.com/flox-examples/kafka-audit-service)**, which consumes
 events published here and exposes a query API that this app calls back.
 
 ## What's included
@@ -37,8 +37,8 @@ brew install flox
 
 ```bash
 # 1. Clone both repos side by side
-git clone <this-repo> rails-kafka-demo
-git clone <companion-repo> kafka-audit-service
+git clone https://github.com/flox-examples/rails-kafka-demo
+git clone https://github.com/flox-examples/kafka-audit-service
 
 # 2. Enter the Flox environment (installs Ruby 3.3, librdkafka, Postgres 16, Kafka)
 cd rails-kafka-demo
